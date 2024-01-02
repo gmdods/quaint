@@ -30,3 +30,6 @@
 *.exe
 *.out
 *.app
+
+# Testing header
+test/unittest.h
