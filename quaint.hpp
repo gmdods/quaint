@@ -1,7 +1,9 @@
 #ifndef QUAINT_H
 #define QUAINT_H
 
+#include <cmath>
 #include <cstdint>
+#include <functional>
 #include <ratio>
 #include <type_traits>
 
@@ -174,6 +176,55 @@ struct diff<seq<D_seq...>, seq<>> {
 template <typename D1, typename D2>
 using diff_t = typename diff<D1, D2>::type;
 
+/* expt :: [Exp] -> Integer -> [Exp]
+ * expt e n
+ *	| n == 0 = map (* Exp "" 0) e
+ *	| n == (-1) = map negate e
+ *	| n == 1 = e
+ *	| otherwise =
+ *		let recurse = expt e (div n 2)
+ *		    square = add recurse recurse
+ *		in if mod n 2 == 1
+ *			then add square e
+ *			else square
+ */
+
+template <typename D, intmax_t N>
+struct expt;
+
+template <typename... D_seq, intmax_t N>
+struct expt<seq<D_seq...>, N> {
+	using recurse = typename expt<seq<D_seq...>, (N / 2)>::type;
+	using square = add_t<recurse, recurse>;
+	using type = std::conditional_t<(N % 2 == 1),
+					add_t<square, seq<D_seq...>>, square>;
+};
+
+template <typename D_hd, typename... D_tl>
+struct expt<seq<D_hd, D_tl...>, -1> {
+	using type =
+	    cons_t<negate_t<D_hd>, typename expt<seq<D_tl...>, -1>::type>;
+};
+
+template <typename D_hd, typename... D_tl>
+struct expt<seq<D_hd, D_tl...>, 0> {
+	using type =
+	    cons_t<exp<basis_t<D_hd>, 0>, typename expt<seq<D_tl...>, 0>::type>;
+};
+
+template <typename... D_seq>
+struct expt<seq<D_seq...>, 1> {
+	using type = seq<D_seq...>;
+};
+
+template <intmax_t N>
+struct expt<seq<>, N> {
+	using type = seq<>;
+};
+
+template <typename D, intmax_t N>
+using expt_t = typename expt<D, N>::type;
+
 } // namespace dim
 
 // https://en.wikipedia.org/wiki/International_System_of_Quantities
@@ -206,18 +257,49 @@ struct linear {
 	friend constexpr U operator-(U qty) { return {-qty.val}; }
 };
 
+template <typename Ratio, intmax_t N>
+struct ratio_exponential_s {
+	using recurse = typename ratio_exponential_s<Ratio, (N / 2)>::type;
+	using square = std::ratio_multiply<recurse, recurse>;
+	using type =
+	    std::conditional_t<(N % 2 == 1), std::ratio_multiply<square, Ratio>,
+			       square>;
+};
+
+template <typename Ratio>
+struct ratio_exponential_s<Ratio, 0> {
+	using type = std::ratio<1, 1>;
+};
+
+template <typename Ratio>
+struct ratio_exponential_s<Ratio, -1> {
+	using type = std::ratio_divide<std::ratio<1, 1>, Ratio>;
+};
+
+template <typename Ratio>
+struct ratio_exponential_s<Ratio, 1> {
+	using type = Ratio;
+};
+
+template <typename Ratio, intmax_t N>
+using ratio_exponential = typename ratio_exponential_s<Ratio, N>::type;
+
 template <typename Ratio, typename Dim>
 struct unit;
 
-template <typename Unit1, typename Unit2>
+template <typename U1, typename U2>
 using unit_multiply =
-    unit<std::ratio_multiply<typename Unit1::ratio, typename Unit2::ratio>,
-	 dim::add_t<typename Unit1::dim, typename Unit2::dim>>;
+    unit<std::ratio_multiply<typename U1::ratio, typename U2::ratio>,
+	 dim::add_t<typename U1::dim, typename U2::dim>>;
 
-template <typename Unit1, typename Unit2>
+template <typename U1, typename U2>
 using unit_divide =
-    unit<std::ratio_divide<typename Unit1::ratio, typename Unit2::ratio>,
-	 dim::diff_t<typename Unit1::dim, typename Unit2::dim>>;
+    unit<std::ratio_divide<typename U1::ratio, typename U2::ratio>,
+	 dim::diff_t<typename U1::dim, typename U2::dim>>;
+
+template <typename U, intmax_t N>
+using unit_expt = unit<ratio_exponential<typename U::ratio, N>,
+		      dim::expt_t<typename U::dim, N>>;
 
 template <typename Unit>
 struct annotate {
@@ -240,6 +322,11 @@ struct annotate {
 		return std::is_same<Unit, Other>::value;
 	}
 };
+
+template <intmax_t Exp, typename Unit>
+constexpr annotate<unit_expt<Unit, Exp>> expt(annotate<Unit>) {
+	return {};
+}
 
 template <typename Ratio, typename Dim>
 struct unit : storage<Rep>, linear<unit<Ratio, Dim>> {
@@ -265,6 +352,11 @@ struct unit : storage<Rep>, linear<unit<Ratio, Dim>> {
 			(Ratio_::num * Ratio::den)};
 	}
 };
+
+template <intmax_t Exp, typename Ratio, typename Dim>
+constexpr unit_expt<unit<Ratio, Dim>, Exp> expt(unit<Ratio, Dim> u) {
+	return {std::pow(u.val, Exp)};
+}
 
 using u_meters = unit<std::ratio<1, 1>, dim::seq<dim::exp<q_length, 1>>>;
 using u_grams = unit<std::ratio<1, 1>, dim::seq<dim::exp<q_mass, 1>>>;

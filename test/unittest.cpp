@@ -30,8 +30,8 @@ unittest("units") {
 		      "unit division");
 
 	constexpr auto eg_newton_meter =
-	    (kilo(grams) * (meters / seconds / seconds) * meters);
+	    (kilo(grams) * (meters / expt<2>(seconds)) * meters);
 	constexpr auto eg_joule =
-	    annotate<decltype(kilo(grams)(1U) * (velocity) * (velocity))>{};
+	    annotate<decltype(kilo(grams)(1U) * expt<2>(velocity))>{};
 	static_assert(eg_newton_meter == eg_joule, "unit multiply");
 }

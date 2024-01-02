@@ -25,3 +25,15 @@ diff (hd1 : tl1) (hd2 : tl2)
   | otherwise = hd1 : diff tl1 (hd2 : tl2)
 diff [] (hd : tl) = -hd : diff [] tl
 diff e [] = e
+
+expt :: [Exp] -> Integer -> [Exp]
+expt e n
+  | n == 0 = map (* Exp "" 0) e
+  | n == (-1) = map negate e
+  | n == 1 = e
+  | otherwise =
+      let recurse = expt e (div n 2)
+          square = add recurse recurse
+       in if mod n 2 == 1
+            then add square e
+            else square
