@@ -267,12 +267,30 @@ struct unit : storage<Rep>, linear<unit<Ratio, Dim>> {
 };
 
 using u_meters = unit<std::ratio<1, 1>, dim::seq<dim::exp<q_length, 1>>>;
-using u_kilograms = unit<std::ratio<1, 1>, dim::seq<dim::exp<q_mass, 1>>>;
+using u_grams = unit<std::ratio<1, 1>, dim::seq<dim::exp<q_mass, 1>>>;
 using u_inches = unit<std::ratio<127, 5'000>, dim::seq<dim::exp<q_length, 1>>>;
 using u_seconds = unit<std::ratio<1, 1>, dim::seq<dim::exp<q_time, 1>>>;
 
+template <typename Ratio, typename Dim>
+constexpr annotate<unit<std::ratio_multiply<std::milli, Ratio>, Dim>>
+milli(annotate<unit<Ratio, Dim>>) {
+	return {};
+}
+
+template <typename Ratio, typename Dim>
+constexpr annotate<unit<std::ratio_multiply<std::centi, Ratio>, Dim>>
+centi(annotate<unit<Ratio, Dim>>) {
+	return {};
+}
+
+template <typename Ratio, typename Dim>
+constexpr annotate<unit<std::ratio_multiply<std::kilo, Ratio>, Dim>>
+kilo(annotate<unit<Ratio, Dim>>) {
+	return {};
+}
+
 constexpr auto meters = annotate<u_meters>{};
-constexpr auto kilograms = annotate<u_kilograms>{};
+constexpr auto grams = annotate<u_grams>{};
 constexpr auto seconds = annotate<u_seconds>{};
 constexpr auto inches = annotate<u_inches>{};
 

@@ -7,12 +7,17 @@
 
 #endif /* ifndef UNITTEST_MAIN */
 
+using namespace quaint;
+
 unittest("conversions") {
-	using namespace quaint;
 	auto measure = meters(3U);
 	ensure(measure.get() == 3);
 	ensure(measure.to(inches) == inches(118U));
+	ensure(kilo(grams)(1U).to(grams) == grams(1'000U));
+}
 
+unittest("units") {
+	auto measure = meters(3U);
 	auto velocity = measure / seconds(1U);
 	static_assert(
 	    std::is_same<
@@ -25,8 +30,8 @@ unittest("conversions") {
 		      "unit division");
 
 	constexpr auto eg_newton_meter =
-	    (kilograms * (meters / seconds / seconds) * meters);
+	    (kilo(grams) * (meters / seconds / seconds) * meters);
 	constexpr auto eg_joule =
-	    annotate<decltype(kilograms(1U) * (velocity) * (velocity))>{};
+	    annotate<decltype(kilo(grams)(1U) * (velocity) * (velocity))>{};
 	static_assert(eg_newton_meter == eg_joule, "unit multiply");
 }
