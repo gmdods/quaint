@@ -13,8 +13,20 @@ unittest("conversions") {
 	ensure(measure.get() == 3);
 	ensure(measure.to(inches) == inches(118U));
 
-	constexpr auto same_units =
-	    std::is_same<decltype(measure / seconds(1U)),
-			 decltype((meters / seconds)(3U))>::value;
-	static_assert(same_units, "ERROR");
+	auto velocity = measure / seconds(1U);
+	static_assert(
+	    std::is_same<
+		decltype(velocity),
+		unit<std::ratio<1, 1>, dim::seq<dim::exp<q_length, 1>,
+						dim::exp<q_time, -1>>>>::value,
+	    "quantity division");
+
+	static_assert(annotate<decltype(velocity)>{} == (meters / seconds),
+		      "unit division");
+
+	constexpr auto eg_newton_meter =
+	    (kilograms * (meters / seconds / seconds) * meters);
+	constexpr auto eg_joule =
+	    annotate<decltype(kilograms(1U) * (velocity) * (velocity))>{};
+	static_assert(eg_newton_meter == eg_joule, "unit multiply");
 }

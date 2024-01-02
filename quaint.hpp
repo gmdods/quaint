@@ -1,47 +1,209 @@
 #ifndef QUAINT_H
 #define QUAINT_H
 
+#include <cstdint>
 #include <ratio>
+#include <type_traits>
 
 namespace quaint {
 
-// https://en.wikipedia.org/wiki/International_System_of_Quantities
-template <intmax_t Length, intmax_t Mass, intmax_t Time>
-struct isq {
-	static constexpr intmax_t length = Length;
-	static constexpr intmax_t mass = Mass;
-	static constexpr intmax_t time = Time;
+namespace dim {
+
+// Type sequence
+
+// Andrei Alexandrescu : Embracing (and also Destroying) Variant Types Safely
+// https://www.youtube.com/watch?v=va9I2qivBOA
+
+template <typename... Ts>
+struct seq {};
+
+template <typename T, typename R>
+struct cons;
+
+template <typename T, typename... Ts>
+struct cons<T, seq<Ts...>> {
+	using type = seq<T, Ts...>;
 };
 
-template <typename isq1, typename isq2>
-using isq_add = isq<isq1::length + isq2::length, isq1::mass + isq2::mass,
-		    isq1::time + isq2::time>;
+template <typename T, typename R>
+using cons_t = typename cons<T, R>::type;
 
-template <typename isq1, typename isq2>
-using isq_sub = isq<isq1::length - isq2::length, isq1::mass - isq2::mass,
-		    isq1::time - isq2::time>;
+// Exponentials
 
-using q_length = isq<1, 0, 0>;
-using q_mass = isq<0, 1, 0>;
-using q_time = isq<0, 0, 1>;
+/* module Quaint where
+ *
+ * import Prelude hiding (exponent)
+ *
+ * data Exp = Exp {basis :: !String, exponent :: !Integer} deriving (Show, Eq)
+ */
+
+template <typename T, intmax_t E>
+struct exp {
+	using type = T;
+};
+
+template <typename T>
+struct basis;
+
+template <typename T, intmax_t E>
+struct basis<exp<T, E>> {
+	using type = T;
+};
+
+template <typename T>
+using basis_t = typename basis<T>::type;
+
+/*
+ * instance Num Exp where
+ *	negate e = e { exponent = negate (exponent e)}
+ *	(+) e1 e2 = e1 { exponent = exponent e1 + exponent e2}
+ *	(*) e1 e2 = e1 { exponent = exponent e1 * exponent e2} -- unused
+ *	fromInteger e = Exp { basis = "", exponent = e } -- unused
+ *	abs e = e { exponent = abs (exponent e)} -- unused
+ *	signum e = e { exponent = signum (exponent e)} -- unused
+ *
+ */
+
+template <typename E1, typename E2>
+struct plus {
+	using type = void;
+};
+
+template <typename T, intmax_t E1, intmax_t E2>
+struct plus<exp<T, E1>, exp<T, E2>> {
+	using type = exp<T, (E1 + E2)>;
+};
+
+template <typename E1, typename E2>
+using plus_t = typename plus<E1, E2>::type;
+
+template <typename E1, typename E2>
+struct minus {
+	using type = void;
+};
+
+template <typename T, intmax_t E1, intmax_t E2>
+struct minus<exp<T, E1>, exp<T, E2>> {
+	using type = exp<T, (E1 - E2)>;
+};
+
+template <typename E1, typename E2>
+using minus_t = typename minus<E1, E2>::type;
+
+template <typename E>
+struct negate {
+	using type = void;
+};
+
+template <typename T, intmax_t E>
+struct negate<exp<T, E>> {
+	using type = exp<T, -E>;
+};
+
+template <typename E>
+using negate_t = typename negate<E>::type;
+
+/*
+ * add :: [Exp] -> [Exp] -> [Exp]
+ * add (hd1 : tl1) (hd2 : tl2)
+ *	| basis hd1 == basis hd2 = (hd1 + hd2) : add tl1 tl2
+ *	| otherwise = hd1 : add tl1 (hd2 : tl2)
+ * add [] (hd : tl) = hd : tl -- exclusive cases
+ * add e [] = e
+ */
+
+template <typename D1, typename D2>
+struct add;
+
+template <typename D1_hd, typename D2_hd, typename... D1_tl, typename... D2_tl>
+struct add<seq<D1_hd, D1_tl...>, seq<D2_hd, D2_tl...>> {
+	using type = std::conditional_t<
+	    std::is_same<basis_t<D1_hd>, basis_t<D2_hd>>::value,
+	    cons_t<plus_t<D1_hd, D2_hd>,
+		   typename add<seq<D1_tl...>, seq<D2_tl...>>::type>,
+	    cons_t<D1_hd,
+		   typename add<seq<D1_tl...>, seq<D2_hd, D2_tl...>>::type>>;
+};
+
+template <typename D_hd, typename... D_tl>
+struct add<seq<>, seq<D_hd, D_tl...>> {
+	using type = seq<D_hd, D_tl...>;
+};
+
+template <typename... D_seq>
+struct add<seq<D_seq...>, seq<>> {
+	using type = seq<D_seq...>;
+};
+
+template <typename D1, typename D2>
+using add_t = typename add<D1, D2>::type;
+
+/*
+ * diff :: [Exp] -> [Exp] -> [Exp]
+ * diff (hd1 : tl1) (hd2 : tl2)
+ *	| basis hd1 == basis hd2 = (hd1 - hd2) : diff tl1 tl2
+ *	| otherwise = hd1 : diff tl1 (hd2 : tl2)
+ * diff [] (hd : tl) = -hd : diff [] tl
+ * diff e [] = e
+ */
+
+template <typename D1, typename D2>
+struct diff;
+
+template <typename D1_hd, typename D2_hd, typename... D1_tl, typename... D2_tl>
+struct diff<seq<D1_hd, D1_tl...>, seq<D2_hd, D2_tl...>> {
+	using type = std::conditional_t<
+	    std::is_same<basis_t<D1_hd>, basis_t<D2_hd>>::value,
+	    cons_t<minus_t<D1_hd, D2_hd>,
+		   typename diff<seq<D1_tl...>, seq<D2_tl...>>::type>,
+	    cons_t<D1_hd,
+		   typename diff<seq<D1_tl...>, seq<D2_hd, D2_tl...>>::type>>;
+};
+
+template <typename D_hd, typename... D_tl>
+struct diff<seq<>, seq<D_hd, D_tl...>> {
+	using type =
+	    cons_t<negate_t<D_hd>, typename diff<seq<>, seq<D_tl...>>::type>;
+};
+
+template <typename... D_seq>
+struct diff<seq<D_seq...>, seq<>> {
+	using type = seq<D_seq...>;
+};
+
+template <typename D1, typename D2>
+using diff_t = typename diff<D1, D2>::type;
+
+} // namespace dim
+
+// https://en.wikipedia.org/wiki/International_System_of_Quantities
+struct q_length {};
+struct q_mass {};
+struct q_time {};
 
 using Rep = std::size_t;
 
 template <typename R>
 struct storage {
 	R val;
-	storage(R val) : val{val} {}
+	constexpr storage(R val) : val{val} {}
 
-	R get() const { return val; }
+	constexpr R get() const { return val; }
 };
 
 template <typename U>
 struct linear {
-	friend bool operator==(U lhs, U rhs) { return lhs.val == rhs.val; }
-	friend U operator+(U lhs, U rhs) { return {lhs.val + rhs.val}; }
-	friend U operator-(U lhs, U rhs) { return {lhs.val - rhs.val}; }
-	friend U operator+(U qty) { return {+qty.val}; }
-	friend U operator-(U qty) { return {-qty.val}; }
+	friend constexpr bool operator==(U lhs, U rhs) {
+		return lhs.val == rhs.val;
+	}
+	friend constexpr U operator+(U lhs, U rhs) {
+		return {lhs.val + rhs.val};
+	}
+	friend constexpr U operator-(U lhs, U rhs) {
+		return {lhs.val - rhs.val};
+	}
+	friend constexpr U operator+(U qty) { return {+qty.val}; }
+	friend constexpr U operator-(U qty) { return {-qty.val}; }
 };
 
 template <typename Ratio, typename Dim>
@@ -50,25 +212,32 @@ struct unit;
 template <typename Unit1, typename Unit2>
 using unit_multiply =
     unit<std::ratio_multiply<typename Unit1::ratio, typename Unit2::ratio>,
-	 isq_add<typename Unit1::dim, typename Unit2::dim>>;
+	 dim::add_t<typename Unit1::dim, typename Unit2::dim>>;
 
 template <typename Unit1, typename Unit2>
 using unit_divide =
     unit<std::ratio_divide<typename Unit1::ratio, typename Unit2::ratio>,
-	 isq_sub<typename Unit1::dim, typename Unit2::dim>>;
+	 dim::diff_t<typename Unit1::dim, typename Unit2::dim>>;
 
 template <typename Unit>
 struct annotate {
-	Unit operator()(unsigned val) const { return {val}; }
+	constexpr Unit operator()(unsigned val) const { return {val}; }
 
 	template <typename Other>
-	annotate<unit_multiply<Unit, Other>> operator*(annotate<Other>) const {
+	constexpr annotate<unit_multiply<Unit, Other>>
+	operator*(annotate<Other>) const {
 		return {};
 	}
 
 	template <typename Other>
-	annotate<unit_divide<Unit, Other>> operator/(annotate<Other>) const {
+	constexpr annotate<unit_divide<Unit, Other>>
+	operator/(annotate<Other>) const {
 		return {};
+	}
+
+	template <typename Other>
+	constexpr bool operator==(annotate<Other>) const {
+		return std::is_same<Unit, Other>::value;
 	}
 };
 
@@ -78,30 +247,32 @@ struct unit : storage<Rep>, linear<unit<Ratio, Dim>> {
 	using dim = Dim;
 
 	using Unit = unit<Ratio, Dim>;
-	unit(Rep val) : storage(val) {}
+	constexpr unit(Rep val) : storage(val) {}
 
 	template <typename Other>
-	unit_multiply<Unit, Other> operator*(Other o) const {
+	constexpr unit_multiply<Unit, Other> operator*(Other o) const {
 		return {val * o.val};
 	}
 
 	template <typename Other>
-	unit_divide<Unit, Other> operator/(Other o) const {
+	constexpr unit_divide<Unit, Other> operator/(Other o) const {
 		return {val / o.val};
 	}
 
 	template <typename Ratio_, typename Dim_>
-	unit<Ratio_, Dim_> to(annotate<unit<Ratio_, Dim_>>) const {
+	constexpr unit<Ratio_, Dim_> to(annotate<unit<Ratio_, Dim_>>) const {
 		return {(val * Ratio_::den * Ratio::num) /
 			(Ratio_::num * Ratio::den)};
 	}
 };
 
-using u_meters = unit<std::ratio<1, 1>, q_length>;
-using u_inches = unit<std::ratio<254, 10'000>, q_length>;
-using u_seconds = unit<std::ratio<1, 1>, q_time>;
+using u_meters = unit<std::ratio<1, 1>, dim::seq<dim::exp<q_length, 1>>>;
+using u_kilograms = unit<std::ratio<1, 1>, dim::seq<dim::exp<q_mass, 1>>>;
+using u_inches = unit<std::ratio<127, 5'000>, dim::seq<dim::exp<q_length, 1>>>;
+using u_seconds = unit<std::ratio<1, 1>, dim::seq<dim::exp<q_time, 1>>>;
 
 constexpr auto meters = annotate<u_meters>{};
+constexpr auto kilograms = annotate<u_kilograms>{};
 constexpr auto seconds = annotate<u_seconds>{};
 constexpr auto inches = annotate<u_inches>{};
 
